@@ -1,38 +1,29 @@
 // 内置函数定义
 const BUILT_IN_FUNCTIONS = {
-  // 截断字符串，专为 Telegram HTML 模式优化！
+  // 截断字符串，专为 Telegram HTML 模式优化
   truncate: (str: string, maxLength: number) => {
     if (!str) return str;
     
-    // 1. 去除所有原生的 HTML 标签，防止暴力截断导致标签未闭合
     let cleanStr = str.replace(/<[^>]+>/g, ' ');
-    
-    // 2. 转义 Telegram 敏感字符，防止普通文本被误认为是 HTML 标签
     cleanStr = cleanStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    
-    // 3. 压缩多余的空白字符和换行，让 Telegram 推送的摘要更紧凑清爽
     cleanStr = cleanStr.replace(/\s+/g, ' ').trim();
 
-    // 4. 执行安全的截断
     if (cleanStr.length <= maxLength) return cleanStr;
     return cleanStr.slice(0, maxLength) + '...';
   },
 
-  // 获取当前时间，支持自定义格式和时区偏移量
+  // 获取当前时间，支持自定义格式和时区偏移
   now: (format = 'YYYY-MM-DD HH:mm:ss', timezone?: number | string) => {
     const date = new Date()
-    // 处理时区
     let targetDate = date
     if (timezone !== undefined) {
       try {
         if (typeof timezone === 'number') {
-          // 使用数字形式的时区偏移（小时）
           const localOffset = date.getTimezoneOffset()
-          const targetOffset = timezone * 60 // 转换为分钟
+          const targetOffset = timezone * 60
           const diffOffset = targetOffset + localOffset
           targetDate = new Date(date.getTime() + diffOffset * 60 * 1000)
         } else {
-          // 保持对字符串时区的支持
           const dateStr = date.toLocaleString('en-US', { timeZone: timezone })
           targetDate = new Date(dateStr)
         }
@@ -49,7 +40,19 @@ const BUILT_IN_FUNCTIONS = {
       ss: () => targetDate.getSeconds().toString().padStart(2, '0')
     }
     return format.replace(/YYYY|MM|DD|HH|mm|ss/g, match => tokens[match]())
-  }
+  },
+
+  // 智能识别验证码并返回点击复制格式
+  findCode: (str: string) => {
+    if (!str) return '';
+    const cleanStr = str.replace(/<[^>]+>/g, ' ');
+    const match = cleanStr.match(/(?<!\d|20)\d{4,8}(?!\d)/);
+    
+    if (match) {
+      return `🔑 验证码 (点击复制): <code>${match[0]}</code>\n`;
+    }
+    return '';
+  },
 } as const
 
 type BuiltInFunction = keyof typeof BUILT_IN_FUNCTIONS
@@ -64,19 +67,13 @@ export function safeInterpolate(
     data: Record<string, any>,
     fallback = ''
 ): string {
-    // console.log('safeInterpolate template:', template) // 减少日志噪音
-
-    // 先处理函数调用（修复 JSON 崩溃的核心位置）
     let result = template.replace(FUNCTION_CALL_REGEX, (_, fnName, argsStr) => {
         try {
-            // 解析函数名
             const fn = BUILT_IN_FUNCTIONS[fnName as BuiltInFunction]
             if (!fn) throw new Error(`未知的函数: ${fnName}`)
 
-            // 解析参数
             const args = argsStr.split(',').map((arg: string) => {
                 const trimmed = arg.trim()
-                // 处理变量路径
                 const parts = trimmed.split('.')
                 if (parts.length > 1) {
                     return parts.reduce((acc: any, part: string) => {
@@ -86,25 +83,21 @@ export function safeInterpolate(
                         return acc[part]
                     }, data)
                 }
-                // 处理数字
                 if (/^\d+$/.test(trimmed)) {
                     return parseInt(trimmed, 10)
                 }
-                // 处理字符串字面量
                 return trimmed.replace(/^["']|["']$/g, '')
             })
 
-            // 执行函数
             // @ts-expect-error "ignore"
             const fnResult = fn(...args)
 
-            // 💥 核心修复：对函数的返回值进行安全的 JSON 转义！
             if (typeof fnResult === 'string') {
                 return fnResult
-                    .replace(/\n/g, '\\n')     // 处理换行符
-                    .replace(/\r/g, '\\r')     // 处理回车符
-                    .replace(/\t/g, '\\t')     // 处理制表符
-                    .replace(/"/g, '\\"')      // 处理双引号
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r')
+                    .replace(/\t/g, '\\t')
+                    .replace(/"/g, '\\"')
             }
             return fnResult === undefined ? fallback : String(fnResult)
 
@@ -114,7 +107,6 @@ export function safeInterpolate(
         }
     })
 
-    // 再处理变量替换
     result = result.replace(VARIABLE_REGEX, (_, path) => {
         try {
             const value = path.split('.').reduce((acc: any, part: string) => {
@@ -124,7 +116,6 @@ export function safeInterpolate(
                 return acc[part]
             }, data)
 
-            // 处理字符串中的特殊字符，避免在 JSON.parse 时出错
             if (typeof value === 'string') {
                 return value
                     .replace(/\n/g, '\\n')
@@ -139,6 +130,5 @@ export function safeInterpolate(
         }
     })
 
-    // console.log('safeInterpolate result:', result)
     return result
 }
