@@ -1,4 +1,3 @@
-// 内置函数定义
 const BUILT_IN_FUNCTIONS = {
   // 截断字符串，专为 Telegram HTML 模式优化
   truncate: (str: string, maxLength: number) => {
@@ -8,6 +7,15 @@ const BUILT_IN_FUNCTIONS = {
     cleanStr = cleanStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     cleanStr = cleanStr.replace(/\s+/g, ' ').trim();
 
+    if (cleanStr.length <= maxLength) return cleanStr;
+    return cleanStr.slice(0, maxLength) + '...';
+  },
+
+  // 专为 Discord/Markdown 优化的截断，不进行 HTML 转义
+  plainTruncate: (str: string, maxLength: number) => {
+    if (!str) return str;
+    let cleanStr = str.replace(/<[^>]+>/g, ' ');
+    cleanStr = cleanStr.replace(/\s+/g, ' ').trim();
     if (cleanStr.length <= maxLength) return cleanStr;
     return cleanStr.slice(0, maxLength) + '...';
   },
@@ -42,14 +50,25 @@ const BUILT_IN_FUNCTIONS = {
     return format.replace(/YYYY|MM|DD|HH|mm|ss/g, match => tokens[match]())
   },
 
-  // 智能识别验证码并返回点击复制格式
+  // 智能识别验证码并返回点击复制格式 (Telegram HTML)
   findCode: (str: string) => {
     if (!str) return '';
     const cleanStr = str.replace(/<[^>]+>/g, ' ');
     const match = cleanStr.match(/(?<!\d|20)\d{4,8}(?!\d)/);
     
     if (match) {
-      return `🔑 验证码 (点击复制): <code>${match[0]}</code>\n`;
+      return `🔑 验证码: <code>${match[0]}</code>\n`;
+    }
+    return '';
+  },
+
+  // Markdown 版的验证码识别（使用反引号，支持 Discord Webhook）
+  findCodeMd: (str: string) => {
+    if (!str) return '';
+    const cleanStr = str.replace(/<[^>]+>/g, ' ');
+    const match = cleanStr.match(/(?<!\d|20)\d{4,8}(?!\d)/);
+    if (match) {
+      return `🔑 **验证码**: \`${match[0]}\`\n`;
     }
     return '';
   },
